@@ -24,7 +24,32 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-n_lines = 0
+class CompactLogger(object):
+    def __init__(self, log_every_n: int = 10):
+        self.n_lines = 0
+        self.log_every_n = log_every_n
+        self.at = 0
+
+    def on_episode_start(self):
+        self.at += 1
+        if self.at == self.log_every_n:
+            self.at = 0
+            self.reset()
+
+    def print(self, message: str):
+        if self.at != 0:
+            return
+        self.n_lines += 1
+        print(message)
+
+    def reset(self):
+        for _ in range(self.n_lines):
+            print("\033[F" + (" " * 80), end="")
+        print("\r", end="")
+        self.n_lines = 0
+
+
+compact_logger = CompactLogger()
 
 GAME_CONFIG = GameConfig(
     n_suits=4,
@@ -103,10 +128,8 @@ class Game(object):
             else:
                 action, expected_score = self._get_best_action(state)
 
-            global n_lines
-            n_lines += 1
-            print(
-                f"{self.pretty_print_action(action, state)} "
+            compact_logger.print(
+                f"Action {self.pretty_print_action(action, state)} "
                 f"for expected reward {expected_score:.2f}"
             )
 
@@ -131,8 +154,7 @@ class Game(object):
             state = state_new
             total_reward += reward
 
-        print(f"Got total reward {total_reward:.2f}.")
-        n_lines += 1
+        compact_logger.print(f"Got total reward {total_reward:.2f}.")
 
     def train(self, n_batches: int):
         with torch.no_grad():
@@ -171,11 +193,7 @@ def main():
     global n_lines
     game = Game(game_config=GAME_CONFIG)
     for epoch in range(N_EPOCHS):
-        for _ in range(n_lines):
-            print("\033[F" + (" " * 80), end="")
-        n_lines = 0
-        print("\r", end="")
-
+        compact_logger.on_episode_start()
         game.play_one_episode()
 
         if len(game.replay_buffer) < 1_000:
@@ -185,8 +203,7 @@ def main():
             game.update_value_model()
 
         avg_loss = game.train(n_batches=128)
-        print(f"Average loss: {avg_loss: .3f}.")
-        n_lines += 1
+        compact_logger.print(f"Average loss: {avg_loss: .3f}.")
 
 
 if __name__ == "__main__":

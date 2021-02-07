@@ -65,7 +65,6 @@ class SimpleModel(nn.Module):
             # Number of lives left.
             + (max_lives + 1)
         )
-        print(f"Expected input size: {input_size}.")
 
         action_space = 2 * hand_size
 
