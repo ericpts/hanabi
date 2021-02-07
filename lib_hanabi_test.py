@@ -1,8 +1,5 @@
 from lib_types import ActionType
 import lib_hanabi
-import pytest
-import numpy as np
-import random
 
 
 def test_environment_create_deck():

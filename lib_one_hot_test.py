@@ -3,7 +3,6 @@ import lib_types
 import pytest
 import numpy as np
 import random
-import lib_util
 
 
 def hand_size():
