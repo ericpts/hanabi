@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 
 
 class CompactLogger(object):
-    def __init__(self, log_every_n: int = 10):
+    def __init__(self, log_every_n: int = 100):
         self.n_lines = 0
         self.log_every_n = log_every_n
         self.at = 0
@@ -49,7 +49,7 @@ class CompactLogger(object):
 compact_logger = CompactLogger()
 
 GAME_CONFIG = GameConfig(
-    n_suits=4,
+    n_suits=1,
     n_ranks=5,
     n_copies=[3, 2, 2, 2, 1],
     n_players=1,
@@ -59,9 +59,10 @@ GAME_CONFIG = GameConfig(
 )
 
 DISCOUNT_FACTOR = 1.0
-N_EPOCHS = 200_000
-UPDATE_VALUE_MODEL_EVERY_N_EPISODES = 10
-BATCH_SIZE = 64
+N_EPOCHS = 100_000
+UPDATE_VALUE_MODEL_EVERY_N_EPISODES = 100
+BATCH_SIZE = 128
+LR = 0.0001
 
 
 def freeze_model(model):
@@ -82,7 +83,7 @@ class Game(object):
         self.game_config = game_config
         self.replay_buffer = ReplayBuffer()
         self.model = SimpleModel(self.game_config)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=LR)
         self.env = lib_hanabi.HanabiEnvironment(GAME_CONFIG, seed=1)
         self.value_model = deepcopy(self.model)
         self.epsilon_greedy = EpsilonGreedy()
@@ -91,11 +92,11 @@ class Game(object):
         X = torch.from_numpy(
             lib_one_hot.encode(game_config=self.game_config, game_state=state)
         ).float()
-        valid_actions = self.model.forward(X)
+        reward_per_action: torch.Tensor = self.model.forward(X)
         best_action = action_of_index(
-            int(valid_actions.argmax(axis=-1)), hand_size=self.game_config.hand_size
+            int(reward_per_action.argmax(axis=-1)), hand_size=self.game_config.hand_size
         )
-        best_score = valid_actions.max(axis=-1).values
+        best_score = reward_per_action.max(axis=-1).values
         return (best_action, best_score)
 
     def pretty_print_action(self, action, state: GameState):
@@ -110,10 +111,11 @@ class Game(object):
     def play_one_episode(self):
         self.epsilon_greedy.on_epoch_start()
         state = self.env.reset()
-        total_reward = 0
+        total_points = 0
         done = False
         while not done:
             if self.epsilon_greedy.flip():
+                action_source = "rand"
                 action = self.env.sample_action()
                 expected_score = self.model.forward(
                     torch.from_numpy(
@@ -123,14 +125,19 @@ class Game(object):
                     ).float()
                 )[index_of_action(action, hand_size=self.game_config.hand_size)]
             else:
+                action_source = "best"
                 action, expected_score = self._get_best_action(state)
 
-            compact_logger.print(
-                f"Action {self.pretty_print_action(action, state)} "
-                f"for expected reward {expected_score:.2f}"
-            )
+            formatted_action = self.pretty_print_action(action, state)
 
             (state_new, reward, done) = self.env.step(action)
+
+            compact_logger.print(
+                f"Action {action_source}-{formatted_action} "
+                f"for expected reward {expected_score: 2.2f}; "
+                f"realized {reward: 2.2f}."
+            )
+
             action_encoded = torch.tensor(
                 index_of_action(action, self.game_config.hand_size)
             ).long()
@@ -149,9 +156,10 @@ class Game(object):
             )
             self.replay_buffer.push(t)
             state = state_new
-            total_reward += reward
+            if reward == 1.0:
+                total_points += 1
 
-        compact_logger.print(f"Got total reward {total_reward:.2f}.")
+        compact_logger.print(f"Got total points {total_points}.")
 
     def train(self, n_batches: int):
         with torch.no_grad():
@@ -175,7 +183,7 @@ class Game(object):
             predicted = torch.gather(
                 self.model(X), -1, torch.unsqueeze(action, -1)
             ).float()
-            loss = F.smooth_l1_loss(predicted, one_step_lookahead)
+            loss = F.mse_loss(predicted, one_step_lookahead)
             loss.backward()
             self.optimizer.step()
             losses.append(float(loss))
@@ -187,19 +195,21 @@ class Game(object):
 
 
 def main():
-    global n_lines
     game = Game(game_config=GAME_CONFIG)
     for epoch in range(N_EPOCHS):
         compact_logger.on_episode_start()
+        compact_logger.print(
+            f"Running epoch {epoch}; " f"eps greedy is {game.epsilon_greedy.get():.2f}"
+        )
         game.play_one_episode()
 
-        if len(game.replay_buffer) < 1_000:
+        if len(game.replay_buffer) < 10_000:
             continue
 
         if epoch % UPDATE_VALUE_MODEL_EVERY_N_EPISODES == 0:
             game.update_value_model()
 
-        avg_loss = game.train(n_batches=128)
+        avg_loss = game.train(n_batches=10)
         compact_logger.print(f"Average loss: {avg_loss: .3f}.")
 
 

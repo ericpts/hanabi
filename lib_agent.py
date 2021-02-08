@@ -10,7 +10,7 @@ class EpsilonGreedy(object):
     def __init__(self):
         self.start = 0.9
         self.end = 0.05
-        self.decay = 1_000
+        self.decay = 2_000
         self.epoch = 0
 
     def get(self) -> float:
@@ -26,7 +26,7 @@ class EpsilonGreedy(object):
 
 
 class ReplayBuffer(object):
-    def __init__(self, max_size: int = 100_000):
+    def __init__(self, max_size: int = 200_000):
         self.store = []
         self.at = 0
         self.max_size = max_size
@@ -70,7 +70,7 @@ class SimpleModel(nn.Module):
 
         self.game_config = game_config
         self.hand_size = hand_size
-        self.fc_sizes = [256]
+        self.fc_sizes = [256, 256]
 
         self.fcs = []
         last_size = input_size
@@ -78,9 +78,9 @@ class SimpleModel(nn.Module):
             self.fcs.append(nn.Linear(last_size, s))
             last_size = s
 
-        self.last_fc = nn.Linear(self.fc_sizes[-1], action_space)
+        self.last_fc = nn.Linear(self.fc_sizes[-1], action_space, bias=False)
 
-    def forward(self, X: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
         for f in self.fcs:
             X = f(X)
             X = F.relu(X)
