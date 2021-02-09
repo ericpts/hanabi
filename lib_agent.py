@@ -69,11 +69,13 @@ class SimpleModel(nn.Module):
             + (max_lives + 1)
         )
 
+        print(f"Input size is {input_size}.")
+
         action_space = 2 * hand_size
 
         self.game_config = game_config
         self.hand_size = hand_size
-        self.fc_sizes = [256, 256]
+        self.fc_sizes = [100, 100]
 
         self.fcs = []
         last_size = input_size
