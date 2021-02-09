@@ -1,4 +1,5 @@
 import numpy as np
+from typing import List
 import random
 import torch
 import torch.nn as nn
@@ -9,7 +10,7 @@ from lib_types import GameConfig
 class EpsilonGreedy(object):
     def __init__(self):
         self.start = 0.9
-        self.end = 0.05
+        self.end = 0.10
         self.decay = 1_000
         self.epoch = 0
 
@@ -51,7 +52,7 @@ class ReplayBuffer(object):
 
 
 class SimpleModel(nn.Module):
-    def __init__(self, game_config: GameConfig):
+    def __init__(self, game_config: GameConfig, fc_sizes: List[int]):
         super(SimpleModel, self).__init__()
         n_players = game_config.n_players
         hand_size = game_config.hand_size
@@ -75,15 +76,14 @@ class SimpleModel(nn.Module):
 
         self.game_config = game_config
         self.hand_size = hand_size
-        self.fc_sizes = [100, 100]
 
         self.fcs = []
         last_size = input_size
-        for s in self.fc_sizes:
+        for s in fc_sizes:
             self.fcs.append(nn.Linear(last_size, s, bias=False))
             last_size = s
 
-        self.last_fc = nn.Linear(self.fc_sizes[-1], action_space, bias=False)
+        self.last_fc = nn.Linear(last_size, action_space, bias=False)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         for f in self.fcs:

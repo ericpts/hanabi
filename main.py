@@ -2,6 +2,7 @@ from lib_util import compact_logger
 from lib_types import GameConfig
 import warnings
 import lib_rl
+import lib_agent
 
 warnings.filterwarnings("ignore")
 
@@ -21,12 +22,17 @@ RL_CONFIG = lib_rl.RLConfig(
     n_epochs=100_000,
     update_value_model_every_n_episodes=100,
     batch_size=128,
-    lr=0.01,
+    lr=0.0001,
+    replay_buffer_size=100_000,
 )
 
 
 def main():
-    game = lib_rl.Game(game_config=GAME_CONFIG, rl_config=RL_CONFIG)
+    game = lib_rl.Game(
+        game_config=GAME_CONFIG,
+        rl_config=RL_CONFIG,
+        model=lib_agent.SimpleModel(GAME_CONFIG, fc_sizes=[100]),
+    )
     for epoch in range(RL_CONFIG.n_epochs):
         compact_logger.on_episode_start()
         compact_logger.print(

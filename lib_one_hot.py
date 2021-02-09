@@ -1,5 +1,7 @@
 import numpy as np
 from lib_types import GameState, GameConfig
+from lib_util import as_torch
+import torch
 
 
 def _encode_hands(hands, player_index, n_suits: int, n_ranks: int, hand_size: int):
@@ -53,24 +55,26 @@ def flatten(*items) -> np.ndarray:
     return np.concatenate([np.asarray(x).flatten() for x in items])
 
 
-def encode(game_config: GameConfig, game_state: GameState) -> np.ndarray:
-    return flatten(
-        _encode_hands(
-            hands=game_state.hands,
-            player_index=game_state.iplayer_to_act,
-            n_suits=game_config.n_suits,
-            n_ranks=game_config.n_ranks,
-            hand_size=game_config.hand_size,
-        ),
-        _encode_stacks(
-            stacks=game_state.stacks,
-            n_suits=game_config.n_suits,
-            n_ranks=game_config.n_ranks,
-        ),
-        _encode_remaining_cards(
-            remaining_cards=game_state.remaining_cards,
-            n_suits=game_config.n_suits,
-            n_ranks=game_config.n_ranks,
-        ),
-        _encode_lives(lives=game_state.lives, max_lives=game_config.max_lives),
+def encode(game_config: GameConfig, game_state: GameState) -> torch.Tensor:
+    return as_torch(
+        flatten(
+            _encode_hands(
+                hands=game_state.hands,
+                player_index=game_state.iplayer_to_act,
+                n_suits=game_config.n_suits,
+                n_ranks=game_config.n_ranks,
+                hand_size=game_config.hand_size,
+            ),
+            _encode_stacks(
+                stacks=game_state.stacks,
+                n_suits=game_config.n_suits,
+                n_ranks=game_config.n_ranks,
+            ),
+            _encode_remaining_cards(
+                remaining_cards=game_state.remaining_cards,
+                n_suits=game_config.n_suits,
+                n_ranks=game_config.n_ranks,
+            ),
+            _encode_lives(lives=game_state.lives, max_lives=game_config.max_lives),
+        )
     )
