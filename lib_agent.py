@@ -10,7 +10,7 @@ class EpsilonGreedy(object):
     def __init__(self):
         self.start = 0.9
         self.end = 0.05
-        self.decay = 2_000
+        self.decay = 1_000
         self.epoch = 0
 
     def get(self) -> float:
@@ -30,6 +30,9 @@ class ReplayBuffer(object):
         self.store = []
         self.at = 0
         self.max_size = max_size
+
+    def __contains__(self, x):
+        return x in self.store
 
     def push(self, x):
         if len(self.store) == self.max_size:
@@ -75,7 +78,7 @@ class SimpleModel(nn.Module):
         self.fcs = []
         last_size = input_size
         for s in self.fc_sizes:
-            self.fcs.append(nn.Linear(last_size, s))
+            self.fcs.append(nn.Linear(last_size, s, bias=False))
             last_size = s
 
         self.last_fc = nn.Linear(self.fc_sizes[-1], action_space, bias=False)
