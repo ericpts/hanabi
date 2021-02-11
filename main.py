@@ -20,9 +20,9 @@ GAME_CONFIG = GameConfig(
 RL_CONFIG = lib_rl.RLConfig(
     discount_factor=1.0,
     n_epochs=100_000,
-    update_value_model_every_n_episodes=100,
+    update_value_model_every_n_episodes=50,
     batch_size=128,
-    lr=0.0001,
+    lr=0.01,
     replay_buffer_size=100_000,
 )
 

@@ -1,5 +1,4 @@
-from lib_agent import SimpleModel, ReplayBuffer, EpsilonGreedy
-import gin
+from lib_agent import ReplayBuffer, EpsilonGreedy
 from typing import Tuple
 from typing import Optional
 import lib_one_hot
@@ -34,7 +33,6 @@ RLConfig = collections.namedtuple(
 )
 
 
-@gin.configurable
 class Game(object):
     def __init__(
         self,
@@ -95,9 +93,9 @@ class Game(object):
             as_torch(done),
         )
         self.replay_buffer.push(t)
+        points = 0
         if reward == 1.0:
             points = 1
-        points = 0
         return points, done, state_new
 
     @torch.no_grad()
