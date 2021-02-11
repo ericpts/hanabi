@@ -1,4 +1,5 @@
 from lib_agent import SimpleModel, ReplayBuffer, EpsilonGreedy
+import gin
 from typing import Tuple
 from typing import Optional
 import lib_one_hot
@@ -33,19 +34,21 @@ RLConfig = collections.namedtuple(
 )
 
 
+@gin.configurable
 class Game(object):
     def __init__(
         self,
         game_config: GameConfig,
         rl_config: RLConfig,
         model: nn.Module,
+        optimizer: torch.optim.Optimizer = torch.optim.SGD,
         seed: Optional[int] = None,
     ):
         self.game_config = game_config
         self.rl_config = rl_config
-        self.replay_buffer = ReplayBuffer()
+        self.replay_buffer = ReplayBuffer(max_size=rl_config.replay_buffer_size)
         self.model = model
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=rl_config.lr)
+        self.optimizer = optimizer(self.model.parameters(), lr=rl_config.lr)
         self.env = lib_hanabi.HanabiEnvironment(game_config, seed=seed)
         self.value_model = deepcopy(self.model)
         self.epsilon_greedy = EpsilonGreedy()

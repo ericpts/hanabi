@@ -1,3 +1,4 @@
+from copy import deepcopy
 import random
 from typing import Tuple, Optional
 from lib_types import GameState, GameConfig, ActionType
@@ -25,12 +26,14 @@ class HanabiEnvironment(object):
         return cards
 
     def current_state(self) -> GameState:
-        return GameState(
-            hands=self.hands,
-            stacks=self.stacks,
-            remaining_cards=self.remaining_cards,
-            lives=self.lives,
-            iplayer_to_act=self.iplayer_to_act,
+        return deepcopy(
+            GameState(
+                hands=self.hands,
+                stacks=self.stacks,
+                remaining_cards=self.remaining_cards,
+                lives=self.lives,
+                iplayer_to_act=self.iplayer_to_act,
+            )
         )
 
     def reset(self) -> GameState:

@@ -1,3 +1,4 @@
+from copy import deepcopy
 import lib_one_hot
 import lib_agent
 import torch
@@ -101,7 +102,7 @@ def test_game_get_best_action_and_playing(
 
 
 def test_game_linear_regression_improves_only_affected_action_simple(
-    seed=0, n_suits: int = 1, n_ranks: int = 5, hand_size: int = 3
+    seed=3, n_suits: int = 1, n_ranks: int = 5, hand_size: int = 1
 ):
     game_config = lib_types.GameConfig(
         n_suits=n_suits,
@@ -118,13 +119,17 @@ def test_game_linear_regression_improves_only_affected_action_simple(
         n_epochs=100_000,
         update_value_model_every_n_episodes=100,
         batch_size=1,
-        lr=0.0001,
+        lr=0.01,
         replay_buffer_size=1,
     )
 
     torch.manual_seed(seed)
     game = lib_rl.Game(
-        game_config, rl_config, seed=seed, model=lib_agent.SimpleModel(game_config, [])
+        game_config,
+        rl_config,
+        model=lib_agent.SimpleModel(game_config, []),
+        optimizer=torch.optim.SGD,
+        seed=seed,
     )
 
     state = game.env.reset()
@@ -132,73 +137,41 @@ def test_game_linear_regression_improves_only_affected_action_simple(
     done = False
     while not done:
         with torch.no_grad():
+            old_state = deepcopy(state)
+            old_encode = lib_one_hot.encode(game_config=game_config, game_state=state)
             q_values = game.model.forward(
                 lib_one_hot.encode(game_config=game_config, game_state=state)
             )
             (points, done, new_state) = game._step(state)
 
+        assert len(game.replay_buffer) == 1
         game.train(n_batches=1)
 
         with torch.no_grad():
+            new_encode = lib_one_hot.encode(game_config=game_config, game_state=state)
+            assert state == old_state
+            assert torch.all(torch.eq(old_encode, new_encode))
             updated_q_values = game.model.forward(
                 lib_one_hot.encode(game_config=game_config, game_state=state)
             )
 
-            print(q_values - updated_q_values)
             assert torch.count_nonzero(q_values - updated_q_values) == 1
 
             state = new_state
 
 
-@pytest.mark.skip
 @pytest.mark.randomize(
     seed=int, n_suits=int, n_ranks=int, hand_size=int, min_num=1, max_num=100
 )
 def test_game_linear_regression_improves_only_affected_action_quickcheck(
     seed, n_suits: int, n_ranks: int, hand_size: int
 ):
-    game_config = lib_types.GameConfig(
+    total_cards = n_suits * n_ranks
+    if hand_size >= total_cards:
+        hand_size = total_cards // 2
+    test_game_linear_regression_improves_only_affected_action_simple(
+        seed=seed,
         n_suits=n_suits,
         n_ranks=n_ranks,
-        n_copies=[3] * n_ranks,
-        n_players=1,
-        n_max_hints=7,
         hand_size=hand_size,
-        max_lives=3,
     )
-
-    rl_config = lib_rl.RLConfig(
-        discount_factor=1.0,
-        n_epochs=100_000,
-        update_value_model_every_n_episodes=100,
-        batch_size=1,
-        lr=0.0001,
-        replay_buffer_size=1,
-    )
-
-    torch.manual_seed(seed)
-    game = lib_rl.Game(
-        game_config, rl_config, seed=seed, model=lib_agent.SimpleModel(game_config, [])
-    )
-
-    state = game.env.reset()
-
-    done = False
-    while not done:
-        with torch.no_grad():
-            q_values = game.model.forward(
-                lib_one_hot.encode(game_config=game_config, game_state=state)
-            )
-            (points, done, new_state) = game._step(state)
-
-        game.train(n_batches=1)
-
-        with torch.no_grad():
-            updated_q_values = game.model.forward(
-                lib_one_hot.encode(game_config=game_config, game_state=state)
-            )
-
-            print(q_values - updated_q_values)
-            assert torch.count_nonzero(q_values - updated_q_values) == 1
-
-            state = new_state

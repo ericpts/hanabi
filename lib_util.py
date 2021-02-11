@@ -51,5 +51,8 @@ compact_logger = CompactLogger()
 def card_to_str(card):
     alphabet = string.ascii_uppercase
     (suit_index, number) = card
-    suit = alphabet[suit_index]
+    if suit_index < len(alphabet):
+        suit = alphabet[suit_index]
+    else:
+        suit = f"({suit_index})"
     return f"{suit}{number}"
