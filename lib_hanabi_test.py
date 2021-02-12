@@ -13,7 +13,7 @@ def test_environment_create_deck():
         n_max_hints=3,
     )
     env = lib_hanabi.HanabiEnvironment(game_config)
-    deck = env.create_deck()
+    deck = env._create_deck()
     assert deck == [
         (0, 0),
         (0, 0),

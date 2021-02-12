@@ -19,6 +19,7 @@ import torch.optim
 import lib_hanabi
 import collections
 import torch.nn as nn
+import gym
 
 RLConfig = collections.namedtuple(
     "RLConfig",
@@ -29,6 +30,7 @@ RLConfig = collections.namedtuple(
         "batch_size",
         "lr",
         "replay_buffer_size",
+        "optimizer",
     ],
 )
 
@@ -36,60 +38,46 @@ RLConfig = collections.namedtuple(
 class Game(object):
     def __init__(
         self,
-        game_config: GameConfig,
         rl_config: RLConfig,
         model: nn.Module,
-        optimizer: torch.optim.Optimizer = torch.optim.SGD,
-        seed: Optional[int] = None,
+        env: gym.Env,
     ):
-        self.game_config = game_config
         self.rl_config = rl_config
         self.replay_buffer = ReplayBuffer(max_size=rl_config.replay_buffer_size)
         self.model = model
-        self.optimizer = optimizer(self.model.parameters(), lr=rl_config.lr)
-        self.env = lib_hanabi.HanabiEnvironment(game_config, seed=seed)
+        self.optimizer = rl_config.optimizer(self.model.parameters(), lr=rl_config.lr)
+        self.env = env
         self.value_model = deepcopy(self.model)
         self.epsilon_greedy = EpsilonGreedy()
 
     @torch.no_grad()
-    def _get_best_action(self, state: GameState):
-        X = lib_one_hot.encode(game_config=self.game_config, game_state=state)
-        reward_per_action: torch.Tensor = self.model.forward(X)
+    def _get_best_action(self, state: np.ndarray) -> Tuple[int, float]:
+        reward_per_action: torch.Tensor = self.model.forward(state)
         best_score, best_action_index = reward_per_action.max(axis=-1)
-        best_action = action_of_index(
-            best_action_index, hand_size=self.game_config.hand_size
-        )
-        return (best_action, best_score)
+        return best_score, best_action_index
 
-    def _step(self, state: GameState) -> Tuple[int, bool, GameState]:
+    def _step(self, state: np.ndarray) -> Tuple[int, bool, GameState]:
         if self.epsilon_greedy.flip():
             action_source = "rand"
-            action = self.env.sample_action()
-            expected_score = self.model.forward(
-                lib_one_hot.encode(game_config=self.game_config, game_state=state)
-            )[index_of_action(action, hand_size=self.game_config.hand_size)]
+            action = torch.as_tensor(self.env.action_space.sample())
+            expected_score = self.model.forward(state)[action]
         else:
             action_source = "best"
-            action, expected_score = self._get_best_action(state)
-
-        formatted_action = pretty_print_action(action, state)
+            expected_score, action = self._get_best_action(state)
 
         (state_new, reward, done) = self.env.step(action)
 
         compact_logger.print(
-            f"Action {action_source}-{formatted_action} "
+            f"Action {action_source}-{action} "
             f"for expected reward {expected_score: 2.2f}; "
             f"realized {reward: 2.2f}."
         )
 
-        action_encoded = torch.tensor(
-            index_of_action(action, self.game_config.hand_size)
-        ).long()
         t = (
-            lib_one_hot.encode(game_config=self.game_config, game_state=state),
-            action_encoded,
+            state,
+            action,
             as_torch(reward),
-            lib_one_hot.encode(game_config=self.game_config, game_state=state_new),
+            state_new,
             as_torch(done),
         )
         self.replay_buffer.push(t)
@@ -150,12 +138,3 @@ def _freeze_model(model):
     model.train(False)
     for p in model.parameters():
         p.requires_grad = False
-
-
-def pretty_print_action(action, state: GameState):
-    (action_type, card_index) = action
-    card = card_to_str(state.hands[0][card_index])
-    if action_type == ActionType.PLAY_CARD:
-        return f"P({card})"
-    else:
-        return f"D({card})"

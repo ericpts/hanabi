@@ -4,14 +4,13 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from lib_types import GameConfig
 
 
 class EpsilonGreedy(object):
     def __init__(self):
         self.start = 0.9
         self.end = 0.10
-        self.decay = 1_000
+        self.decay = 2_000
         self.epoch = 0
 
     def get(self) -> float:
@@ -52,30 +51,8 @@ class ReplayBuffer(object):
 
 
 class SimpleModel(nn.Module):
-    def __init__(self, game_config: GameConfig, fc_sizes: List[int]):
+    def __init__(self, input_size: int, output_size: int, fc_sizes: List[int]):
         super(SimpleModel, self).__init__()
-        n_players = game_config.n_players
-        hand_size = game_config.hand_size
-        n_suits = game_config.n_suits
-        n_ranks = game_config.n_ranks
-        max_lives = game_config.max_lives
-        input_size = (
-            # Encoding each player's hand.
-            n_players * hand_size * (n_suits + n_ranks)
-            # Stacks.
-            + n_suits * (n_ranks + 1)
-            # Remaining cards in the game.
-            + n_suits * n_ranks
-            # Number of lives left.
-            + (max_lives + 1)
-        )
-
-        print(f"Input size is {input_size}.")
-
-        action_space = 2 * hand_size
-
-        self.game_config = game_config
-        self.hand_size = hand_size
 
         self.fcs = []
         last_size = input_size
@@ -83,7 +60,7 @@ class SimpleModel(nn.Module):
             self.fcs.append(nn.Linear(last_size, s, bias=False))
             last_size = s
 
-        self.last_fc = nn.Linear(last_size, action_space, bias=False)
+        self.last_fc = nn.Linear(last_size, output_size, bias=False)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         for f in self.fcs:

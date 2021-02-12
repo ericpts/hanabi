@@ -16,12 +16,12 @@ def timeit(message: str):
         print(f"Spent {elapsed * 1_000:.0f}ms in {message}.")
 
 
-def as_torch(x: np.ndarray) -> torch.FloatTensor:
-    return torch.tensor(x).float()
+def as_torch(x: np.ndarray) -> torch.Tensor:
+    return torch.as_tensor(x).float()
 
 
 class CompactLogger(object):
-    def __init__(self, log_every_n: int = 100):
+    def __init__(self, log_every_n: int = 50):
         self.n_lines = 0
         self.log_every_n = log_every_n
         self.at = 0
