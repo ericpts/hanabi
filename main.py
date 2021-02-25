@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore")
 
 
 GAME_CONFIG = GameConfig(
-    n_suits=1,
+    n_suits=4,
     n_ranks=5,
     n_copies=[3, 3, 3, 3, 3],
     n_players=1,
@@ -24,11 +24,11 @@ GAME_CONFIG = GameConfig(
 RL_CONFIG = lib_rl.RLConfig(
     discount_factor=1.0,
     n_epochs=20_000,
-    update_value_model_every_n_episodes=50,
-    batch_size=128,
+    update_value_model_every_n_episodes=20,
+    batch_size=32,
     lr=0.001,
-    replay_buffer_size=100_000,
-    optimizer=torch.optim.SGD,
+    replay_buffer_size=1_000,
+    optimizer=torch.optim.Adam,
 )
 
 
@@ -39,7 +39,7 @@ def main():
         model=lib_agent.SimpleModel(
             input_size=np.prod(env.observation_space.shape),
             output_size=env.action_space.n,
-            fc_sizes=[100],
+            fc_sizes=[100, 100],
         ),
         env=env,
     )
@@ -50,13 +50,13 @@ def main():
         )
         game.play_one_episode()
 
-        if len(game.replay_buffer) < 5_000:
+        if len(game.replay_buffer) < 1_000:
             continue
 
         if epoch % RL_CONFIG.update_value_model_every_n_episodes == 0:
             game.update_value_model()
 
-        avg_loss = game.train(n_batches=50)
+        avg_loss = game.train(n_batches=10)
         compact_logger.print(f"Average loss: {avg_loss: .3f}.")
 
 

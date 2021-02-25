@@ -26,7 +26,7 @@ class EpsilonGreedy(object):
 
 
 class ReplayBuffer(object):
-    def __init__(self, max_size: int = 200_000):
+    def __init__(self, max_size: int = 1_000):
         self.store = []
         self.at = 0
         self.max_size = max_size
@@ -57,10 +57,12 @@ class SimpleModel(nn.Module):
         self.fcs = []
         last_size = input_size
         for s in fc_sizes:
-            self.fcs.append(nn.Linear(last_size, s, bias=False))
+            self.fcs.append(nn.Linear(last_size, s))
             last_size = s
 
-        self.last_fc = nn.Linear(last_size, output_size, bias=False)
+        self.fcs = nn.ModuleList(self.fcs)
+
+        self.last_fc = nn.Linear(last_size, output_size)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         for f in self.fcs:
