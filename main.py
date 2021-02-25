@@ -1,4 +1,3 @@
-from lib_util import compact_logger
 import numpy as np
 import torch
 import torch.optim
@@ -24,17 +23,18 @@ GAME_CONFIG = GameConfig(
 RL_CONFIG = lib_rl.RLConfig(
     discount_factor=1.0,
     n_epochs=20_000,
-    update_value_model_every_n_episodes=20,
+    update_value_model_every_n_steps=100,
     batch_size=32,
     lr=0.001,
     replay_buffer_size=1_000,
     optimizer=torch.optim.Adam,
+    minimum_replay_buffer_size_for_training=1_000,
 )
 
 
 def main():
     env = lib_hanabi.HanabiEnvironment(GAME_CONFIG)
-    game = lib_rl.Game(
+    lib_rl.RLGame(
         rl_config=RL_CONFIG,
         model=lib_agent.SimpleModel(
             input_size=np.prod(env.observation_space.shape),
@@ -42,22 +42,7 @@ def main():
             fc_sizes=[100, 100],
         ),
         env=env,
-    )
-    for epoch in range(RL_CONFIG.n_epochs):
-        compact_logger.on_episode_start()
-        compact_logger.print(
-            f"Running epoch {epoch}; " f"eps greedy is {game.epsilon_greedy.get():.2f}"
-        )
-        game.play_one_episode()
-
-        if len(game.replay_buffer) < 1_000:
-            continue
-
-        if epoch % RL_CONFIG.update_value_model_every_n_episodes == 0:
-            game.update_value_model()
-
-        avg_loss = game.train(n_batches=10)
-        compact_logger.print(f"Average loss: {avg_loss: .3f}.")
+    ).run()
 
 
 if __name__ == "__main__":

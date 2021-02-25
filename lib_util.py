@@ -21,7 +21,7 @@ def as_torch(x: np.ndarray) -> torch.Tensor:
 
 
 class CompactLogger(object):
-    def __init__(self, log_every_n: int = 50):
+    def __init__(self, log_every_n: int = 100):
         self.n_lines = 0
         self.log_every_n = log_every_n
         self.at = 0

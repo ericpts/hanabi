@@ -21,21 +21,24 @@ import collections
 import torch.nn as nn
 import gym
 
+RUNNING_METRIC_DECAY = 0.99
+
 RLConfig = collections.namedtuple(
     "RLConfig",
     [
         "discount_factor",
         "n_epochs",
-        "update_value_model_every_n_episodes",
+        "update_value_model_every_n_steps",
         "batch_size",
         "lr",
         "replay_buffer_size",
         "optimizer",
+        "minimum_replay_buffer_size_for_training",
     ],
 )
 
 
-class Game(object):
+class RLGame(object):
     def __init__(
         self,
         rl_config: RLConfig,
@@ -49,13 +52,49 @@ class Game(object):
         self.env = env
         self.value_model = deepcopy(self.model)
         self.epsilon_greedy = EpsilonGreedy()
+        self.running_loss = 0.0
+        self.running_points = 0.0
+        self.total_steps = 0
+
+    def run(self):
+        for epoch in range(self.rl_config.n_epochs):
+            compact_logger.on_episode_start()
+            compact_logger.print(
+                f"Running epoch {epoch}; "
+                f"eps greedy is {self.epsilon_greedy.get():.2f}"
+            )
+            self._play_one_episode()
+
+    def _play_one_episode(self):
+        self.epsilon_greedy.on_epoch_start()
+        state = self.env.reset()
+        done = False
+        while not done:
+            points, done, state = self._step(state)
+            self.total_steps += 1
+            self.running_points = (
+                RUNNING_METRIC_DECAY * self.running_points
+                + (1 - RUNNING_METRIC_DECAY) * points
+            )
+
+            if (
+                len(self.replay_buffer)
+                < self.rl_config.minimum_replay_buffer_size_for_training
+            ):
+                continue
+
+            if self.total_steps % self.rl_config.update_value_model_every_n_steps == 0:
+                self._update_value_model()
+
+            self.running_loss = (
+                RUNNING_METRIC_DECAY * self.running_loss
+                + (1 - RUNNING_METRIC_DECAY) * self._train_once()
+            )
+
+        compact_logger.print(f"Running points: {self.running_points:.2f}.")
+        compact_logger.print(f"Running loss: {self.running_loss:.2f}.")
 
     @torch.no_grad()
-    def _get_best_action(self, state: np.ndarray) -> Tuple[int, float]:
-        reward_per_action: torch.Tensor = self.model.forward(state)
-        best_score, best_action_index = reward_per_action.max(axis=-1)
-        return best_score, best_action_index
-
     def _step(self, state: np.ndarray) -> Tuple[int, bool, GameState]:
         if self.epsilon_greedy.flip():
             action_source = "rand"
@@ -87,20 +126,14 @@ class Game(object):
         return points, done, state_new
 
     @torch.no_grad()
-    def play_one_episode(self):
-        self.epsilon_greedy.on_epoch_start()
-        state = self.env.reset()
-        total_points = 0
-        done = False
-        while not done:
-            points, done, state = self._step(state)
-            total_points += points
+    def _get_best_action(self, state: np.ndarray) -> Tuple[int, float]:
+        reward_per_action: torch.Tensor = self.model.forward(state)
+        best_score, best_action_index = reward_per_action.max(axis=-1)
+        return best_score, best_action_index
 
-        compact_logger.print(f"Got total points {total_points}.")
-
-    def train(self, n_batches: int):
+    def _train_once(self) -> float:
         with torch.no_grad():
-            samples = self.replay_buffer.sample(self.rl_config.batch_size * n_batches)
+            samples = self.replay_buffer.sample(self.rl_config.batch_size)
             (X, action, reward, X_new, done) = map(torch.stack, zip(*samples))
             value_after_action = self.value_model.forward(X_new).max(axis=-1).values
             add_value_after_action = 1 - done
@@ -112,24 +145,14 @@ class Game(object):
             )
             one_step_lookahead = torch.unsqueeze(one_step_lookahead, -1)
 
-        data_loader = torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(X, action, one_step_lookahead),
-            batch_size=self.rl_config.batch_size,
-        )
+        self.optimizer.zero_grad()
+        predicted = torch.gather(self.model(X), -1, torch.unsqueeze(action, -1)).float()
+        loss = F.smooth_l1_loss(predicted, one_step_lookahead)
+        loss.backward()
+        self.optimizer.step()
+        return float(loss)
 
-        losses = []
-        for (X, action, one_step_lookahead) in data_loader:
-            self.optimizer.zero_grad()
-            predicted = torch.gather(
-                self.model(X), -1, torch.unsqueeze(action, -1)
-            ).float()
-            loss = F.smooth_l1_loss(predicted, one_step_lookahead)
-            loss.backward()
-            self.optimizer.step()
-            losses.append(float(loss))
-        return np.mean(losses)
-
-    def update_value_model(self):
+    def _update_value_model(self):
         self.value_model = deepcopy(self.model)
         _freeze_model(self.value_model)
 
