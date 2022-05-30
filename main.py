@@ -21,14 +21,14 @@ GAME_CONFIG = GameConfig(
 )
 
 RL_CONFIG = lib_rl.RLConfig(
-    discount_factor=1.0,
+    discount_factor=0.9,
     n_epochs=20_000,
-    update_value_model_every_n_steps=100,
-    batch_size=32,
+    update_value_model_every_n_steps=500,
+    batch_size=8,
     lr=0.001,
-    replay_buffer_size=1_000,
+    replay_buffer_size=1000,
     optimizer=torch.optim.Adam,
-    minimum_replay_buffer_size_for_training=1_000,
+    minimum_replay_buffer_size_for_training=1000,
 )
 
 
@@ -39,7 +39,7 @@ def main():
         model=lib_agent.SimpleModel(
             input_size=np.prod(env.observation_space.shape),
             output_size=env.action_space.n,
-            fc_sizes=[100, 100],
+            fc_sizes=[100, 100, 100, 100, 100],
         ),
         env=env,
     ).run()

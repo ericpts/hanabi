@@ -2,7 +2,7 @@ from lib_agent import ReplayBuffer, EpsilonGreedy
 from typing import Tuple
 from typing import Optional
 import lib_one_hot
-from lib_util import as_torch, compact_logger, card_to_str
+from lib_util import as_torch, compact_logger, card_to_str, AverageAccumulator
 from lib_types import (
     ActionType,
     action_of_index,
@@ -20,8 +20,10 @@ import lib_hanabi
 import collections
 import torch.nn as nn
 import gym
+import pandas as pd
 
-RUNNING_METRIC_DECAY = 0.99
+pd.options.display.float_format = "{:,.2f}".format
+
 
 RLConfig = collections.namedtuple(
     "RLConfig",
@@ -43,8 +45,9 @@ class RLGame(object):
         self,
         rl_config: RLConfig,
         model: nn.Module,
-        env: gym.Env,
+        env: lib_hanabi.HanabiEnvironment,
     ):
+        print(f"Using model: {model}")
         self.rl_config = rl_config
         self.replay_buffer = ReplayBuffer(max_size=rl_config.replay_buffer_size)
         self.model = model
@@ -52,13 +55,13 @@ class RLGame(object):
         self.env = env
         self.value_model = deepcopy(self.model)
         self.epsilon_greedy = EpsilonGreedy()
-        self.running_loss = 0.0
-        self.running_points = 0.0
         self.total_steps = 0
 
     def run(self):
         for epoch in range(self.rl_config.n_epochs):
             compact_logger.on_episode_start()
+            compact_logger.print("\n" * 5)
+            compact_logger.print("=" * 80)
             compact_logger.print(
                 f"Running epoch {epoch}; "
                 f"eps greedy is {self.epsilon_greedy.get():.2f}"
@@ -66,16 +69,17 @@ class RLGame(object):
             self._play_one_episode()
 
     def _play_one_episode(self):
+        episode_loss = AverageAccumulator("loss")
+        episode_points = 0
+
         self.epsilon_greedy.on_epoch_start()
         state = self.env.reset()
         done = False
+
         while not done:
             points, done, state = self._step(state)
             self.total_steps += 1
-            self.running_points = (
-                RUNNING_METRIC_DECAY * self.running_points
-                + (1 - RUNNING_METRIC_DECAY) * points
-            )
+            episode_points += points
 
             if (
                 len(self.replay_buffer)
@@ -86,13 +90,11 @@ class RLGame(object):
             if self.total_steps % self.rl_config.update_value_model_every_n_steps == 0:
                 self._update_value_model()
 
-            self.running_loss = (
-                RUNNING_METRIC_DECAY * self.running_loss
-                + (1 - RUNNING_METRIC_DECAY) * self._train_once()
-            )
+            loss = self._train_once()
+            episode_loss.add(loss)
 
-        compact_logger.print(f"Running points: {self.running_points:.2f}.")
-        compact_logger.print(f"Running loss: {self.running_loss:.2f}.")
+        compact_logger.print(f"Episode points: {episode_points}.")
+        compact_logger.print(f"Episode loss: {episode_loss.average():.2f}.")
 
     @torch.no_grad()
     def _step(self, state: np.ndarray) -> Tuple[int, bool, GameState]:
@@ -104,13 +106,52 @@ class RLGame(object):
             action_source = "best"
             expected_score, action = self._get_best_action(state)
 
+        compact_logger.print(f"Environment: {self.env.pretty_print()}")
+        compact_logger.print(f"Expected score: ")
+
+        score_per_action_index = self.model.forward(state)
+
+        rows = []
+        for action_type in [ActionType.PLAY_CARD, ActionType.DISCARD]:
+            current_row = []
+            for card_index in range(self.env.game_config.hand_size):
+                action_index = index_of_action(
+                    (action_type, card_index), self.env.game_config.hand_size
+                )
+                score = float(score_per_action_index[action_index])
+
+                current_row.append(score)
+
+            rows.append(current_row)
+
+        if compact_logger.is_printing():
+            df = pd.DataFrame(
+                rows,
+                ["PLAY", "DISC"],
+                [
+                    self.env._pretty_print_hand(card_index)
+                    for card_index in range(self.env.game_config.hand_size)
+                ],
+            )
+            compact_logger.print(df)
+
+            action_type, card_index = action_of_index(
+                action, self.env.game_config.hand_size
+            )
+            ppat = {
+                ActionType.PLAY_CARD: "PLAY",
+                ActionType.DISCARD: "DISC",
+            }[action_type]
+            pp_card = self.env._pretty_print_hand(card_index)
+
+            compact_logger.print(
+                f"Action {action_source}-{ppat}({pp_card}) "
+                f"for expected reward {expected_score: 2.2f}; "
+            )
+
         (state_new, reward, done) = self.env.step(action)
 
-        compact_logger.print(
-            f"Action {action_source}-{action} "
-            f"for expected reward {expected_score: 2.2f}; "
-            f"realized {reward: 2.2f}."
-        )
+        compact_logger.print(f"Realized {reward: 2.2f}.")
 
         t = (
             state,
@@ -147,7 +188,7 @@ class RLGame(object):
 
         self.optimizer.zero_grad()
         predicted = torch.gather(self.model(X), -1, torch.unsqueeze(action, -1)).float()
-        loss = F.smooth_l1_loss(predicted, one_step_lookahead)
+        loss = F.mse_loss(predicted, one_step_lookahead)
         loss.backward()
         self.optimizer.step()
         return float(loss)

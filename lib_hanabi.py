@@ -109,7 +109,7 @@ class HanabiEnvironment(gym.Env):
         self.hands[player_index].append(card)
 
     def _apply_action(self, player_index: int, action) -> float:
-        reward = -0.1
+        reward = 0.0
         (action_type, action_obj) = action
         if action_type == ActionType.PLAY_CARD:
             card_index = action_obj
@@ -132,3 +132,26 @@ class HanabiEnvironment(gym.Env):
         else:
             assert action_type == ActionType.HINT
         return reward
+
+    def _pretty_print_suit(self, suit: int) -> str:
+        return chr(ord("A") + suit)
+
+    def _pretty_print_hand(self, index: int) -> str:
+        (suit, number) = self.hands[0][index]
+        return f"{self._pretty_print_suit(suit)}{number}"
+
+    def _pretty_print_hands(self):
+        hands_state = []
+        for i in range(len(self.hands[0])):
+            hands_state.append(self._pretty_print_hand(i))
+        hands_pretty_print = ", ".join(hands_state)
+        return hands_pretty_print
+
+    def pretty_print(self) -> str:
+
+        stacks_state = []
+        for suit in range(self.game_config.n_suits):
+            stacks_state.append(f"{self._pretty_print_suit(suit)}: {self.stacks[suit]}")
+        stacks_pretty_print = ", ".join(stacks_state)
+
+        return f"Hands({self._pretty_print_hands()}), Stacks({stacks_pretty_print})"

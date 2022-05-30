@@ -8,9 +8,9 @@ import torch.nn.functional as F
 
 class EpsilonGreedy(object):
     def __init__(self):
-        self.start = 0.9
-        self.end = 0.10
-        self.decay = 2_000
+        self.start = 0.2
+        self.end = 0.05
+        self.decay = 1_000
         self.epoch = 0
 
     def get(self) -> float:
@@ -62,7 +62,7 @@ class SimpleModel(nn.Module):
 
         self.fcs = nn.ModuleList(self.fcs)
 
-        self.last_fc = nn.Linear(last_size, output_size)
+        self.last_fc = nn.Linear(last_size, output_size, bias=False)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         for f in self.fcs:

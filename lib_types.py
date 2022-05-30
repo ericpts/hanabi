@@ -48,7 +48,7 @@ def index_of_action(action, hand_size):
 def action_of_index(index, hand_size):
     if index >= hand_size:
         action_type = ActionType.DISCARD
-        index -= hand_size
+        index = index - hand_size
     else:
         action_type = ActionType.PLAY_CARD
     card_index = int(index)

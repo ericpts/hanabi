@@ -33,7 +33,7 @@ class CompactLogger(object):
             self.reset()
 
     def print(self, message: str):
-        if self.at != 0:
+        if not self.is_printing():
             return
         self.n_lines += 1
         print(message)
@@ -43,6 +43,9 @@ class CompactLogger(object):
             print("\033[F" + (" " * 80), end="")
         print("\r", end="")
         self.n_lines = 0
+
+    def is_printing(self) -> bool:
+        return self.at == 0
 
 
 compact_logger = CompactLogger()
@@ -56,3 +59,22 @@ def card_to_str(card):
     else:
         suit = f"({suit_index})"
     return f"{suit}{number}"
+
+
+class AverageAccumulator(object):
+    def __init__(self, name: str):
+        self.name = name
+        self.reset()
+
+    def add(self, x):
+        self.sum += x
+        self.n += 1
+
+    def average(self):
+        if self.n == 0:
+            return 0
+        return self.sum / self.n
+
+    def reset(self):
+        self.sum = 0.0
+        self.n = 0
